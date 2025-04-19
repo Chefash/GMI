@@ -1,0 +1,103 @@
+// GMI – Smart Contract Boilerplate (Solana, Anchor Framework)
+
+// This is a simplified structure focusing on staking + check-in
+
+// 1. Smart contract handles:
+// - staking (deposit/withdraw)
+// - daily check-in
+// - tracking streaks
+// - calculating & distributing $GMI rewards
+
+use anchor_lang::prelude::*;
+
+#[program]
+pub mod gmi {
+    use super::*;
+
+    pub fn initialize_user(ctx: Context<InitializeUser>) -> Result<()> {
+        let user = &mut ctx.accounts.user_account;
+        user.authority = *ctx.accounts.authority.key;
+        user.streak = 0;
+        user.last_check_in = 0;
+        user.total_rewards = 0;
+        Ok(())
+    }
+
+    pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        let user = &mut ctx.accounts.user_account;
+        user.staked += amount;
+        // Transfer funds here using CPI
+        Ok(())
+    }
+
+    pub fn check_in(ctx: Context<CheckIn>) -> Result<()> {
+        let user = &mut ctx.accounts.user_account;
+        let current_time = Clock::get()?.unix_timestamp;
+
+        // Ensure it's a new day
+        require!(current_time - user.last_check_in >= 86400, GmiError::AlreadyCheckedIn);
+
+        // Ensure check-in is before 9AM local time (this can be mocked/tested client-side)
+        // We'll skip timezone complexity here
+
+        user.last_check_in = current_time;
+        user.streak += 1;
+
+        // Rewards can be calculated simply here, example:
+        let reward = 100 * user.streak as u64;
+        user.total_rewards += reward;
+
+        Ok(())
+    }
+
+    pub fn claim_rewards(ctx: Context<ClaimRewards>) -> Result<()> {
+        // Send $GMI tokens to user
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct InitializeUser<'info> {
+    #[account(init, payer = authority, space = 8 + 64)]
+    pub user_account: Account<'info, UserAccount>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Stake<'info> {
+    #[account(mut)]
+    pub user_account: Account<'info, UserAccount>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct CheckIn<'info> {
+    #[account(mut)]
+    pub user_account: Account<'info, UserAccount>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimRewards<'info> {
+    #[account(mut)]
+    pub user_account: Account<'info, UserAccount>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+}
+
+#[account]
+pub struct UserAccount {
+    pub authority: Pubkey,
+    pub staked: u64,
+    pub streak: u64,
+    pub last_check_in: i64,
+    pub total_rewards: u64,
+}
+
+#[error_code]
+pub enum GmiError {
+    #[msg("You already checked in today.")]
+    AlreadyCheckedIn,
+}
